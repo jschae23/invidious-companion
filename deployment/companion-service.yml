@@ -1,0 +1,50 @@
+# Replacement for the `companion` service in Invidious' docker-compose.yml.
+#
+# This builds from the jschae23 fork instead of pulling the upstream Quay image
+# quay.io/invidious/invidious-companion:2026.11.07-07ae73c.
+#
+# Prepare the build context next to your compose file:
+#   git clone https://github.com/jschae23/invidious-companion.git invidious-companion
+#   cd invidious-companion && git checkout dfc14db   # or master
+#
+# Then replace the `companion` service in your Invidious compose with the block
+# below and run: docker compose up -d --build
+#
+# If your compose already declares `companioncache` under top-level `volumes:`,
+# keep that declaration and copy only the `services.companion` block.
+
+services:
+    companion:
+        build:
+            context: ./invidious-companion
+            dockerfile: Dockerfile
+            args:
+                CHECK_CHECKSUMS: "1"
+        image: invidious-companion:fork
+        # Please read the following file for a comprehensive list of all available
+        # environment variables and their associated syntax:
+        # https://github.com/iv-org/invidious/blob/master/config/config.example.yml
+        environment:
+            # Use the key generated in the 2nd step
+            - SERVER_SECRET_KEY=KEY
+        restart: unless-stopped
+        # Uncomment only if you have configured "public_url" for Invidious companion
+        # Or if you want to use Invidious companion as an API in your program.
+        # Remove "127.0.0.1:" if used from an external IP
+        # ports:
+        #   - "127.0.0.1:8282:8282"
+        logging:
+            options:
+                max-size: "1G"
+                max-file: "4"
+        cap_drop:
+            - ALL
+        read_only: true
+        # cache for youtube library
+        volumes:
+            - companioncache:/var/tmp/youtubei.js:rw
+        security_opt:
+            - no-new-privileges:true
+
+volumes:
+    companioncache:
