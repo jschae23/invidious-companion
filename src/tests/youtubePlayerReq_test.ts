@@ -57,12 +57,13 @@ function stubClients(clients: Record<string, unknown>) {
     };
 }
 
-function requestPlayer() {
+function requestPlayer(preferredClient?: string) {
     return youtubePlayerReq(
         { actions: {}, session: { player: null } } as never,
         VIDEO_ID,
         { youtube_session: { oauth_enabled: false } } as never,
         (() => Promise.resolve("test-pot")) as never,
+        preferredClient,
     );
 }
 
@@ -177,6 +178,39 @@ Deno.test("player fallback recovery", async (t) => {
             stub.restore();
         }
     });
+
+    await t.step("uses a usable preferred client first", async () => {
+        const stub = stubClients({
+            VISIONOS: playableResponse("VISIONOS"),
+            WEB: playableResponse("WEB"),
+        });
+        try {
+            const result = await requestPlayer("VISIONOS");
+            assertEquals(stub.calls, ["VISIONOS"]);
+            assertEquals(result.data.videoDetails?.client, "VISIONOS");
+        } finally {
+            stub.restore();
+        }
+    });
+
+    await t.step(
+        "falls back when the preferred client is unusable",
+        async () => {
+            const unusable = playableResponse("VISIONOS");
+            unusable.streamingData.adaptiveFormats = [{}] as never;
+            const stub = stubClients({
+                VISIONOS: unusable,
+                WEB: playableResponse("WEB"),
+            });
+            try {
+                const result = await requestPlayer("VISIONOS");
+                assertEquals(stub.calls, ["VISIONOS", "WEB"]);
+                assertEquals(result.data.videoDetails?.client, "WEB");
+            } finally {
+                stub.restore();
+            }
+        },
+    );
 
     await t.step(
         "preserves the original error when every fallback fails",

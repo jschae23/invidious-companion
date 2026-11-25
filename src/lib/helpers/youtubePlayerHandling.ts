@@ -26,6 +26,7 @@ export const youtubePlayerParsing = async ({
     tokenMinter,
     metrics,
     overrideCache = false,
+    preferredClient,
 }: {
     innertubeClient: Innertube;
     videoId: string;
@@ -33,11 +34,17 @@ export const youtubePlayerParsing = async ({
     tokenMinter: TokenMinter;
     metrics: Metrics | undefined;
     overrideCache?: boolean;
+    preferredClient?: string;
 }): Promise<object> => {
     const cacheEnabled = overrideCache ? false : config.cache.enabled;
     const kv = await getKv(config);
+    // Keep preferred-client responses separate so a cached WEB response is
+    // never reused for DASH, where full-range VISIONOS URLs are required.
+    const cacheKey = preferredClient
+        ? ["video_cache", videoId, "preferred", preferredClient]
+        : ["video_cache", videoId];
 
-    const videoCached = (await kv.get(["video_cache", videoId]))
+    const videoCached = (await kv.get(cacheKey))
         .value as Uint8Array;
 
     if (videoCached != null && cacheEnabled) {
@@ -48,6 +55,7 @@ export const youtubePlayerParsing = async ({
             videoId,
             config,
             tokenMinter,
+            preferredClient,
         );
         const videoData = youtubePlayerResponse.data;
 
@@ -66,7 +74,7 @@ export const youtubePlayerParsing = async ({
         // Modify the original YouTube response to include deciphered URLs
         if (streamingData && videoData && videoData.streamingData) {
             const ecatcherServiceTracking = videoData.responseContext
-                ?.serviceTrackingParams.find((o: { service: string }) =>
+                ?.serviceTrackingParams?.find((o: { service: string }) =>
                     o.service === "ECATCHER"
                 );
             const clientNameUsed = ecatcherServiceTracking?.params?.find((
@@ -144,7 +152,7 @@ export const youtubePlayerParsing = async ({
             if (cacheEnabled) {
                 (async () => {
                     await kv.set(
-                        ["video_cache", videoId],
+                        cacheKey,
                         compress(
                             new TextEncoder().encode(
                                 JSON.stringify(videoOnlyNecessaryInfo),

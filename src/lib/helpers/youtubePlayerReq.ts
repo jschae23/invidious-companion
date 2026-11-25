@@ -75,11 +75,21 @@ function isPlayable(data: PlayerData): boolean {
     return data?.playabilityStatus?.status === "OK";
 }
 
+// Used for an explicitly requested client (currently VISIONOS for DASH).
+// It must have a plain adaptive URL so youtubePlayerHandling can decipher it
+// and the media proxy can serve byte ranges for the whole file.
+function preferredClientUsable(data: PlayerData): boolean {
+    return isPlayable(data) && getFormats(data).length > 0 &&
+        adaptiveFormatsUsable(data) && formatsUsable(data) &&
+        Boolean(data?.streamingData?.adaptiveFormats?.[0]?.url);
+}
+
 export const youtubePlayerReq = async (
     innertubeClient: Innertube,
     videoId: string,
     config: Config,
     tokenMinter: TokenMinter,
+    preferredClient?: string,
 ): Promise<ApiResponse> => {
     const innertubeClientOauthEnabled = config.youtube_session.oauth_enabled;
 
@@ -89,6 +99,29 @@ export const youtubePlayerReq = async (
     }
 
     const contentPoToken = await tokenMinter(videoId);
+
+    if (preferredClient) {
+        try {
+            const preferredResponse = await callWatchEndpoint(
+                videoId,
+                innertubeClient,
+                preferredClient,
+                contentPoToken,
+            );
+            if (preferredClientUsable(preferredResponse.data)) {
+                console.log(
+                    `[INFO] Using preferred YT client ${preferredClient}`,
+                );
+                return preferredResponse;
+            }
+        } catch (error) {
+            console.log(
+                `[WARNING] Preferred YT client ${preferredClient} failed: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
+    }
 
     const youtubePlayerResponse = await callWatchEndpoint(
         videoId,
