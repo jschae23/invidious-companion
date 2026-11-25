@@ -8,6 +8,7 @@ import { verifyRequest } from "../../lib/helpers/verifyRequest.ts";
 import { encryptQuery } from "../../lib/helpers/encryptQuery.ts";
 import { validateVideoId } from "../../lib/helpers/validateVideoId.ts";
 import { TOKEN_MINTER_NOT_READY_MESSAGE } from "../../constants.ts";
+import { selectOriginalFormat } from "../../lib/helpers/dashFormatSelection.ts";
 
 const PRIVATE_PARAM_NAMES = ["pot", "ip"];
 
@@ -83,11 +84,12 @@ latestVersion.get("/", async (c) => {
             res: new Response("No itag found."),
         });
     } else if (selectedItagFormat) {
-        // Always offer original audio if possible
+        // Always offer original audio if possible, preferring the plain track
+        // over Stable Volume / Voice Boost variants.
         // This may be changed due to https://github.com/iv-org/invidious/issues/5501
-        const itagUrl = selectedItagFormat.find((itag) =>
-            itag.is_original
-        )?.url as string || selectedItagFormat[0].url as string;
+        const selectedFormat = selectOriginalFormat(selectedItagFormat) ??
+            selectedItagFormat[0];
+        const itagUrl = selectedFormat.url as string;
         const itagUrlParsed = new URL(itagUrl);
         const queryParams = new URLSearchParams(itagUrlParsed.search);
         let urlToRedirect = itagUrlParsed.toString();

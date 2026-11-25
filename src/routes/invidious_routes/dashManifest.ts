@@ -9,8 +9,12 @@ import { HTTPException } from "hono/http-exception";
 import { encryptQuery } from "../../lib/helpers/encryptQuery.ts";
 import { validateVideoId } from "../../lib/helpers/validateVideoId.ts";
 import { TOKEN_MINTER_NOT_READY_MESSAGE } from "../../constants.ts";
+import { selectDashFormats } from "../../lib/helpers/dashFormatSelection.ts";
 
 const PRIVATE_PARAM_NAMES = ["pot", "ip"];
+// IOS/ANDROID adaptive URLs stop accepting byte ranges after ~9.4 MB.
+// VISIONOS URLs accept ranges across the whole file, so use them for DASH.
+const DASH_PREFERRED_CLIENT = "VISIONOS";
 
 const dashManifest = new Hono();
 
@@ -55,6 +59,7 @@ dashManifest.get("/:videoId", async (c) => {
         config,
         tokenMinter: tokenMinter!,
         metrics,
+        preferredClient: DASH_PREFERRED_CLIENT,
     });
     const videoInfo = youtubeVideoInfo(
         innertubeClient,
@@ -69,10 +74,11 @@ dashManifest.get("/:videoId", async (c) => {
     c.header("content-type", "application/dash+xml");
 
     if (videoInfo.streaming_data) {
-        // video.js only support MP4 not WEBM
-        videoInfo.streaming_data.adaptive_formats = videoInfo
-            .streaming_data.adaptive_formats
-            .filter((i) => i.mime_type.includes("mp4"));
+        // video.js only supports MP4, and the manifest must contain a single
+        // audio language so dash.js does not select a dubbed track.
+        videoInfo.streaming_data.adaptive_formats = selectDashFormats(
+            videoInfo.streaming_data.adaptive_formats,
+        );
 
         const player_response = videoInfo.page[0];
         // TODO: fix include storyboards in DASH manifest file

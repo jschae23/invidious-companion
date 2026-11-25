@@ -89,6 +89,9 @@ videoPlaybackProxy.get("/", async (c) => {
         "accept": "*/*",
         "accept-encoding": "gzip, deflate, br, zstd",
         "accept-language": "en-us,en;q=0.5",
+        // Google can close keep-alive connections without TLS close_notify,
+        // which makes Deno's fetch fail intermittently on ranged requests.
+        "connection": "close",
         "origin": "https://www.youtube.com",
         "referer": "https://www.youtube.com",
     };
